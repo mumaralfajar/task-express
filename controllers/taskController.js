@@ -1,103 +1,185 @@
-const tasks = require('../models/taskModel');
+const Task = require('../models/taskModel');
 const moment = require('moment');
+const mongoose = require('mongoose');
 
 // Get all tasks (with pagination)
-exports.getAllTasks = (req, res) => {
-    const { page = 1, size = 5 } = req.query;
-    const offset = (page - 1) * size;
-    const paginatedItems = tasks.slice(offset, offset + parseInt(size));
+exports.getAllTasks = async (req, res) => {
+    try {
+        const { page = 1, size = 5 } = req.query;
+        const limit = parseInt(size);
+        const skip = (page - 1) * limit;
 
-    return res.json({
-        status: true,
-        message: 'Tasks retrieved successfully',
-        time: moment().valueOf(),
-        data: {
-            page: parseInt(page),
-            size: parseInt(size),
-            totalItems: tasks.length,
-            totalPages: Math.ceil(tasks.length / size),
-            items: paginatedItems
-        }
-    });
+        const tasks = await Task.find().limit(limit).skip(skip);
+        const totalItems = await Task.countDocuments();
+
+        res.json({
+            status: true,
+            message: 'Tasks retrieved successfully',
+            time: moment().valueOf(),
+            data: {
+                page: parseInt(page),
+                size: limit,
+                totalItems,
+                totalPages: Math.ceil(totalItems / limit),
+                items: tasks
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Error retrieving tasks', error });
+    }
 };
 
 // Get task by ID
-exports.getTaskById = (req, res) => {
-    const { id } = req.params;
-    const task = tasks.find(t => t.id === parseInt(id));
-    if (!task) {
-        return res.status(404).json({
-            status: false,
-            message: 'Task not found',
+exports.getTaskById = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Ensure ID is a valid MongoDB ObjectId
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                status: false,
+                message: 'Invalid task ID',
+                time: moment().valueOf(),
+                data: null
+            });
+        }
+
+        const task = await Task.findById(id);
+        if (!task) {
+            return res.status(404).json({
+                status: false,
+                message: 'Task not found',
+                time: moment().valueOf(),
+                data: null
+            });
+        }
+        res.json({
+            status: true,
+            message: 'Task retrieved successfully',
             time: moment().valueOf(),
-            data: null
+            data: task
         });
+    } catch (error) {
+        res.status(500).json({ message: 'Error retrieving task', error });
     }
-    return res.json({
-        status: true,
-        message: 'Task retrieved successfully',
-        time: moment().valueOf(),
-        data: task
-    });
 };
 
 // Create new task
-exports.createTask = (req, res) => {
-    const newTask = {
-        id: tasks.length + 1,
-        title: req.body.title,
-        description: req.body.description
-    };
-    tasks.push(newTask);
-    return res.json({
-        status: true,
-        message: 'Task created successfully',
-        time: moment().valueOf(),
-        data: newTask
-    });
+exports.createTask = async (req, res) => {
+    try {
+        const { title, description } = req.body;
+
+        // Validate input
+        if (!title || !description) {
+            return res.status(400).json({
+                status: false,
+                message: 'Title and description are required',
+                time: moment().valueOf(),
+                data: null
+            });
+        }
+
+        const newTask = new Task({
+            title,
+            description
+        });
+        await newTask.save();
+        res.json({
+            status: true,
+            message: 'Task created successfully',
+            time: moment().valueOf(),
+            data: newTask
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Error creating task', error });
+    }
 };
 
 // Update task by ID
-exports.updateTask = (req, res) => {
-    const { id } = req.params;
-    const task = tasks.find(t => t.id === parseInt(id));
-    if (!task) {
-        return res.status(404).json({
-            status: false,
-            message: 'Task not found',
-            time: moment().valueOf(),
-            data: null
-        });
-    }
-    task.title = req.body.title || task.title;
-    task.description = req.body.description || task.description;
+exports.updateTask = async (req, res) => {
+    try {
+        const { id } = req.params;
 
-    return res.json({
-        status: true,
-        message: 'Task updated successfully',
-        time: moment().valueOf(),
-        data: task
-    });
+        // Ensure ID is a valid MongoDB ObjectId
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                status: false,
+                message: 'Invalid task ID',
+                time: moment().valueOf(),
+                data: null
+            });
+        }
+
+        const { title, description } = req.body;
+
+        // Validate input
+        if (!title || !description) {
+            return res.status(400).json({
+                status: false,
+                message: 'Title and description are required',
+                time: moment().valueOf(),
+                data: null
+            });
+        }
+
+        const task = await Task.findByIdAndUpdate(id, {
+            title,
+            description
+        }, { new: true });
+
+        if (!task) {
+            return res.status(404).json({
+                status: false,
+                message: 'Task not found',
+                time: moment().valueOf(),
+                data: null
+            });
+        }
+
+        res.json({
+            status: true,
+            message: 'Task updated successfully',
+            time: moment().valueOf(),
+            data: task
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Error updating task', error });
+    }
 };
 
 // Delete task by ID
-exports.deleteTask = (req, res) => {
-    const { id } = req.params;
-    const taskIndex = tasks.findIndex(t => t.id === parseInt(id));
-    if (taskIndex === -1) {
-        return res.status(404).json({
-            status: false,
-            message: 'Task not found',
+exports.deleteTask = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Ensure ID is a valid MongoDB ObjectId
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                status: false,
+                message: 'Invalid task ID',
+                time: moment().valueOf(),
+                data: null
+            });
+        }
+
+        const task = await Task.findByIdAndDelete(id);
+
+        if (!task) {
+            return res.status(404).json({
+                status: false,
+                message: 'Task not found',
+                time: moment().valueOf(),
+                data: null
+            });
+        }
+
+        res.json({
+            status: true,
+            message: 'Task deleted successfully',
             time: moment().valueOf(),
             data: null
         });
+    } catch (error) {
+        res.status(500).json({ message: 'Error deleting task', error });
     }
-    tasks.splice(taskIndex, 1);
-
-    return res.json({
-        status: true,
-        message: 'Task deleted successfully',
-        time: moment().valueOf(),
-        data: null
-    });
 };
